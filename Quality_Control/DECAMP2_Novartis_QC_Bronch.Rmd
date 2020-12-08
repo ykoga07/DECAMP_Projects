@@ -1,0 +1,2265 @@
+---
+title: "Preliminary Quality Control of Novartis DECAMP2 Broncial Brushings RNA-seq data"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: true
+    fig_width: 9
+    fig_height: 6
+    theme: cosmo
+geometry: margin=1in
+---
+
+## Preprocessing
+
+```{r, message = FALSE, warning=FALSE}
+# Load library:
+library(plyr)
+library(SummarizedExperiment)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(pheatmap)
+library("RColorBrewer")
+library(DESeq2)
+library(knitr)
+library(kableExtra)
+
+set.seed("12345")
+
+# Load data:
+se <- readRDS("/restricted/projectnb/pulmseq/Novartis/processing/work/28/da9dcb4ebb5f902c53fff1bc1ebdc2/Novartis_Gene_Expression.rds")
+colnames(se) <- gsub(pattern = "_.*", "", colnames(se))
+
+# Load annotation:
+
+# Matches sample ID to kitnumber + Has batch info
+annotManifest <- read_excel("/restricted/projectnb/pulmseq/Novartis/annotation/Novartis_RNASeq_run_manifest.xlsx")
+
+# Matches sample ID to sample type/RIN (received from Jack, 8/24/20)
+annotSampleEM0 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM0", skip = 2)
+
+annotSampleEM5 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM5", skip = 2)
+
+annotSampleEM6 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM6", skip = 2)
+
+annotSampleEM8 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM8", skip = 3)
+
+annotSampleEM15 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM15", skip = 3)
+
+annotSampleEM16 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM16", skip = 3)
+
+annotSampleN1 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "N1", skip = 3)
+
+annotSampleN2 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "N2", skip = 3)
+
+# Combine Jack's sample-based annotation file into one dataframe
+annotSampleEM0 <- annotSampleEM0[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Original Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM0) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleEM5 <- annotSampleEM5[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Patient ID", "Patient ID", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM5) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleEM6 <- annotSampleEM6[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM6) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleEM8 <- annotSampleEM8[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Original Sample ID", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM8) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleEM15 <- annotSampleEM15[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM15) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleEM16 <- annotSampleEM16[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM16) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleN1 <- annotSampleN1[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleN1) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleN2 <- annotSampleN2[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleN2) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+allAnnotSamples <- ls()[grep("annotSample", ls())]
+annotSample <- as.data.frame(matrix(ncol = 8))
+colnames(annotSample) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+# Combine
+for (x in allAnnotSamples) {
+  annotSamples <- get(x)
+  annotSamples$`Isolation Date` <- as.character(annotSamples$`Isolation Date`)
+  annotSample <- rbind(annotSample, annotSamples)
+}
+annotSample <- annotSample[-which(is.na(annotSample$`RNA Sample ID`)), ]
+annotSample <- annotSample[-which(is.na(annotSample$`Sample Type`)), ]
+
+annotSample <- annotSample[-which(duplicated(annotSample$`RNA Sample ID`)), ]
+
+# Save which samples had wrong rRNA peak when checking RIN
+wrongRRNA.ix <- grep(pattern = "rong rRNA peak", annotSample$RIN)
+annotSample$wrongRNAPeak <- 0
+annotSample$wrongRNAPeak[wrongRRNA.ix] <- 1
+
+# Edit RIN section to convert into numeric vector
+annotSample$RIN <- gsub(pattern = "(wrong rRNA peak)", replacement = "", annotSample$RIN, fixed = TRUE)
+annotSample$RIN <- gsub(pattern = "(wrong RNA peak)", replacement = "", annotSample$RIN, fixed = TRUE)
+annotSample$RIN <- gsub(pattern = "(wrong rRNA peaks)", replacement = "", annotSample$RIN, fixed = TRUE)
+annotSample$RIN <- gsub(pattern = "(Wrong rRNA peak)", replacement = "", annotSample$RIN, fixed = TRUE)
+annotSample$RIN <- gsub(pattern = "(Wrong rRNA peaks)", replacement = "", annotSample$RIN, fixed = TRUE)
+annotSample$RIN <- gsub(pattern = "\\/NA", replacement = "", annotSample$RIN)
+annotSample$RIN <- gsub(pattern = ".*\\/", replacement = "", annotSample$RIN)
+annotSample$RIN <- as.numeric(annotSample$RIN)
+# There is a "29", probably 2.9, will ask Jack
+annotSample$RIN[annotSample$RIN == 29] <- 2.9
+
+# Consolidate nasal/bronch terms
+annotSample$`Sample Type` <- gsub(pattern = ".*Bronch.*", replacement = "Bronchial Brushings", annotSample$`Sample Type`)
+annotSample$`Sample Type` <- gsub(pattern = ".*Nasal.*", replacement = "Nasal Brushings", annotSample$`Sample Type`)
+
+annotManifest <- filter(annotManifest, Run == "Run 1")
+annotSample <- annotSample[annotSample$`RNA Sample ID` %in% annotManifest$Sample, ]
+annotSample <- annotSample[match(annotSample$`RNA Sample ID`, annotManifest$Sample), ]
+
+# Removing duplicate column
+annotManifest$`Kit Number` <- NULL
+
+annot <- cbind(annotManifest, annotSample)
+
+# Clinical info:
+
+# Matches kitnumber to randID, "Novartis_datadump"
+annotDataDump2 <- read_excel("/rprojectnb/decamp/annotation/20200920/FullDECAMP2_DataDump_20200920.xlsx", sheet = "_D2CASEMAP", )
+
+# randID to demographics info, "Novartis_datadump"
+annotDataDump3 <- read_excel("/rprojectnb/decamp/annotation/20200920/FullDECAMP2_DataDump_20200920.xlsx", sheet = "_D2DEMO")
+
+# randID to age/smoking info, "Novartis_datadump"
+annotDataDump4 <- read_excel("/rprojectnb/decamp/annotation/20200920/FullDECAMP2_DataDump_20200920.xlsx", sheet = "_D2ELIGCHECK")
+
+# randID to FEV/FVC, "Novartis_datadump"
+annotDataDump5 <- read_excel("/rprojectnb/decamp/annotation/20200920/FullDECAMP2_DataDump_20200920.xlsx", sheet = "_D2PFT")
+annotDataDump5 <- filter(annotDataDump5, timepoint == "Baseline Visit")
+
+# Combine annotation info
+annotA <- merge(merge(annotDataDump2, annotDataDump3, by.x = "randID", by.y = "randID"), annotDataDump4, by.x = "randID", by.y = "randID")
+annotA <- merge(annotA, annotDataDump5, by.x = "randID", by.y = "randID")
+
+# Removing patient "4796-053" as "Pacific Islander" for time being
+annotA <- annotA[!(duplicated(annotA$randID)), ]
+
+annot <- merge(annot, annotA, by.x = "Kit Number", by.y = "kitnumber", all.x = TRUE)
+
+annotBronch <- annot[annot$`Sample Type` == "Bronchial Brushings", ]
+annotNasal <- annot[annot$`Sample Type` == "Nasal Brushings", ]
+
+uniquePatients <- length(unique(annot$`Kit Number`))
+
+numBronch <- length(unique(annotBronch$Sample))
+numNasal <- length(unique(annotNasal$Sample))
+
+bothBronchNasal <- length(intersect(annotBronch$`Kit Number`, annotNasal$`Kit Number`))
+```
+There are `r length(annot$Sample)` samples and `r uniquePatients` unique patients in the dataset. `r numBronch` are bronchial samples, and `r numNasal` are nasal samples. There are `r bothBronchNasal` patients that have both bronchial and nasal samples.
+
+
+```{r}
+# Samples flagged by Novartis as poor quality:
+flaggedByNovartis <- c(
+  "EM15-14", "EM15-31", "EM15-64", "EM15-85", "EM16-194", "EM16-195",
+  "EM16-228", "EM5-100", "EM8-112", "EM8-130", "EM8-158", "EM8-171",
+  "EM8-26", "EM8-55", "EM8-66", "N1-115", "N1-119", "N1-125",
+  "N1-139", "N1-25", "N1-40", "N1-55", "N1-63", "N1-64",
+  "N1-67", "N1-81", "N1-83", "N1-84", "N1-94", "N2-10",
+  "N2-15", "N2-18", "N2-30", "N2-31", "N2-22", "N2-28"
+)
+```
+
+```{r, warning = F, message = F}
+seBronch <- se[, which(colnames(se) %in% annotBronch$`RNA Sample ID`)]
+
+annotBronch <- annotBronch[annotBronch$`RNA Sample ID` %in% colnames(se), ]
+
+# reorder
+annotBronch <- annotBronch[match(colnames(seBronch), annotBronch$`RNA Sample ID`), ]
+
+coldataBronch <- colData(seBronch)
+```
+
+## Violin Plots, QC Metrics {.tabset}
+
+### RIN
+
+```{r, warning = F, message = F}
+dots <- T
+boxplot <- F
+violin <- T
+
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = annotBronch$RIN
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("RIN") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "Bronchial Brushings") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+
+p
+```
+
+### Genes detected
+
+```{r, warning = F, message = F}
+dots <- T
+boxplot <- T
+violin <- T
+
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = colSums(assay(seBronch) > 0)
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("# Genes detected") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "Number of genes detected") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+
+p
+```
+
+### Percent GC
+
+```{r, warning = F, message = F}
+
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = unlist(lapply(coldataBronch$FastQC_percent_GC, FUN = mean))
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("Mean GC content (%)") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "FastQC, GC content (%)") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+
+p
+```
+
+### Percentage aligned to exons
+
+```{r, warning = F, message = F}
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = (coldataBronch$RSeQC_cds_exons_tag_pct +
+    coldataBronch$RSeQC_3_utr_exons_tag_pct +
+    coldataBronch$RSeQC_5_utr_exons_tag_pct)
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("Aligned to exonic region (%)") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "RSeQC, Percent aligned to exons") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+
+p
+```
+
+### Percentage aligned to introns
+
+```{r, warning = F, message = F}
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = coldataBronch$RSeQC_introns_tag_pct
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("Aligned to intronic region (%)") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "RSeQC, Percent aligned to introns") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+
+p
+```
+
+### Percentage aligned to intergenic regions
+
+```{r, warning = F, message = F}
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = coldataBronch$RSeQC_tes_down_10kb_tag_pct +
+    coldataBronch$RSeQC_tss_up_10kb_tag_pct
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("Aligned to intergenic region (%)") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "RSeQC, Percent aligned to intergenic region") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+
+p
+```
+Includes regions upstream of TSS (<10kb) and downstream of TES (<10kb)
+
+### Strandedness - Sense
+
+```{r, warning = F, message = F}
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = coldataBronch$RSeQC_pe_sense * 100
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("Sense-stranded (%)") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "RSeQC, Percent Sense-strandedness") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+
+p
+```
+
+### Strandedness - Antisense
+
+```{r, warning = F, message = F}
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = coldataBronch$RSeQC_pe_antisense * 100
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("Antisense-stranded (%)") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "RSeQC, Percent Antisense-strandedness") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+
+p
+```
+
+
+### Proper Pair Percentage
+
+```{r, warning = F, message = F}
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = coldataBronch$RSeQC_proper_pairs_percent
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("TIN") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "RSeQC, Proper Pairs (%)") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+p
+```
+
+### TIN
+
+```{r, warning = F, message = F}
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = coldataBronch$RSeQC_TIN_mean
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("TIN") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "RSeQC, TIN") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+
+p
+```
+
+
+### Percentage reads uniquely mapped
+
+```{r, warning = F, message = F}
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = coldataBronch$STAR_uniquely_mapped_percent
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("Uniquely mapped to genome(%)") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "STAR, Unique mapped") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+
+p
+```
+
+
+### Percentage reads unmapped
+
+```{r, warning = F, message = F}
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = coldataBronch$STAR_unmapped_mismatches_percent +
+    coldataBronch$STAR_unmapped_tooshort_percent +
+    coldataBronch$STAR_unmapped_other_percent
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("Unmapped to genome(%)") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "STAR, Percent unmapped") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+p
+```
+
+### Total reads
+
+```{r, warning = F, message = F}
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = coldataBronch$STAR_total_reads
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("Total Number of Reads") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "STAR, Total reads") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+p
+```
+
+
+### Mismatch rate
+
+```{r, warning = F, message = F}
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = coldataBronch$STAR_mismatch_rate
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 10),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("Mismatch rate") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "STAR, mismatch rate") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+summary <- "median"
+summ <- df %>%
+  dplyr::group_by(x) %>%
+  dplyr::summarize(value = stats::median(y))
+fun <- stats::median
+
+summ$statY <- max(df$y) + (max(df$y) - min(df$y)) * 0.1
+summary <- paste(toupper(substr(summary, 1, 1)),
+  substr(summary, 2, nchar(summary)),
+  sep = ""
+)
+summ$label <- paste0(summary, ": ", round(summ$value, 5))
+
+p <- p + ggplot2::geom_text(
+  data = summ,
+  ggplot2::aes_string(
+    x = "x",
+    y = "statY",
+    label = "label"
+  ),
+  size = 5
+)
+p <- p + ggplot2::stat_summary(
+  fun = fun, fun.min = fun,
+  fun.max = fun,
+  geom = "crossbar",
+  color = "red",
+  linetype = "dashed"
+)
+p
+```
+
+## Histogram, QC outliers
+
+A tally of how many times a sample had an outlier for a numeric QC output was taken. An outlier was considered to be a value past 2 standard deviations of the mean. The barplot below is colored by whether the sample RIN was higher or lower than 5, to determine if RIN scores had a correlation to the QC results.
+
+```{r, message = FALSE, warning=FALSE}
+fastqc.ix <- grep("FastQC", colnames(coldataBronch))
+rseqc.ix <- grep("RSeQC", colnames(coldataBronch))
+star.ix <- grep("STAR", colnames(coldataBronch))
+
+colDataBronchSubset <- coldataBronch[, c(fastqc.ix, rseqc.ix, star.ix)]
+
+# Bronch samples flagged by Novartis
+flaggedByNovartisBronch <- flaggedByNovartis[flaggedByNovartis %in% rownames(colDataBronchSubset)]
+novartisQC <- sapply(rownames(colDataBronchSubset), function(x) {
+  if (x %in% flaggedByNovartisBronch) {
+    return("Poor")
+  } else {
+    return("Good")
+  }
+})
+
+# FastQC outputs lists instead of numeric/integer, because it is looking
+# at pairs of fastqs.
+classlist <- c()
+for (x in 1:ncol(colDataBronchSubset)) {
+  classlist <- c(classlist, class(colDataBronchSubset[1, x]))
+}
+
+# Of FastQC outputs, only taking out average seq length, total sequences,
+# dedup percentage, percentGC. Other metrics seem to be passing for all data points
+colDataBronchSubsetFastq <- colDataBronchSubset[, c(4, 12, 16, 17)]
+colDataBronchSubsetFastq2 <- apply(colDataBronchSubsetFastq, 1:2, function(x) {
+  return(mean(unlist(x)))
+})
+colDataBronchSubset <- colDataBronchSubset[, -which(classlist == "list")]
+colDataBronchSubset <- cbind(colDataBronchSubset, colDataBronchSubsetFastq2)
+
+# Also removing all QC metrics which have the same values across all samples
+rm.ix.qc <- c()
+for (x in 1:ncol(colDataBronchSubset)) {
+  if (length(unique(colDataBronchSubset[, x])) == 1) {
+    rm.ix.qc <- c(rm.ix.qc, x)
+  }
+}
+
+colDataBronchSubset <- colDataBronchSubset[, -rm.ix.qc]
+
+qc.tally <- matrix(ncol = nrow(colDataBronchSubset), data = 0)
+colnames(qc.tally) <- rownames(colDataBronchSubset)
+
+qc.tally2 <- matrix(
+  ncol = nrow(colDataBronchSubset),
+  nrow = ncol(colDataBronchSubset),
+  data = 0
+)
+
+rownames(qc.tally2) <- colnames(colDataBronchSubset)
+colnames(qc.tally2) <- rownames(colDataBronchSubset)
+
+isNumeric <- 0
+for (i in 1:ncol(colDataBronchSubset)) {
+  qc <- colDataBronchSubset[, i]
+  if (class(qc) == "numeric" | class(qc) == "integer") {
+    isNumeric <- isNumeric + 1
+    qc.filt <- qc[!is.na(qc)]
+    mean.qc <- mean(qc.filt)
+    sd.qc <- sd(qc.filt)
+    qc.tally[, which(qc > mean.qc + 2 * sd.qc | qc < mean.qc - 2 * sd.qc)] <- qc.tally[, which(qc > mean.qc + 2 * sd.qc | qc < mean.qc - 2 * sd.qc)] + 1
+
+    qc.tally2[i, which(qc > mean.qc + 2 * sd.qc | qc < mean.qc - 2 * sd.qc)] <- qc.tally2[i, which(qc > mean.qc + 2 * sd.qc | qc < mean.qc - 2 * sd.qc)] + 1
+  }
+}
+
+qc.tally.gg <- as.data.frame(t(qc.tally))
+qc.tally.gg$RIN <- annotBronch$RIN < 5
+qc.tally.gg$RIN[qc.tally.gg$RIN == TRUE] <- "Lower than 5"
+qc.tally.gg$RIN[qc.tally.gg$RIN == FALSE] <- "Higher than 5"
+
+histQC <- ggplot(data = qc.tally.gg, aes(x = V1, color = RIN, fill = RIN)) +
+  geom_histogram() +
+  labs(x = "Tally of outliers") +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 15),
+    axis.title = ggplot2::element_text(size = 15)
+  )
+
+histQC
+
+# rowSums(qc.tally2[,colSums(qc.tally2) > 30])
+
+qc.tally.gg$Number_Outliers_Binned <- qc.tally.gg$V1 > 25
+
+qc.tally.gg$Number_Outliers_Binned <- as.character(qc.tally.gg$Number_Outliers_Binned)
+qc.tally.gg$Number_Outliers_Binned <- gsub("FALSE", "x < 25",
+                                           qc.tally.gg$Number_Outliers_Binned)
+qc.tally.gg$Number_Outliers_Binned <- gsub("TRUE", "x => 25",
+                                           qc.tally.gg$Number_Outliers_Binned)
+
+highAmountOutlier <- colnames(qc.tally)[which(qc.tally > 25)]
+
+qualAnnot <- sapply(qc.tally, function(x) {
+  if (x < 25) {
+    return("x =< 25")
+  } else if (x < 40) {
+    return("25 < x < 40")
+  } else {
+    return("x >= 40")
+  }
+})
+
+Number_Outliers_Binned <- as.factor(qualAnnot)
+Number_Outliers_Binned <- factor(Number_Outliers_Binned, levels = c("x =< 25",
+                                    "25 < x < 40",
+                                    "x >= 40"))
+```
+
+A total of `r isNumeric` QC metrics were taken into consideration. The following samples had a high number of QC metrics outliers: `r highAmountOutlier`
+
+The barplots were also annotated by the QC distinctions Novartis had previously made. (Poor vs Good)
+
+```{r, message = FALSE, warning=FALSE}
+qc.tally.gg$NovartisQC <- novartisQC
+histQC2 <- ggplot(data = qc.tally.gg, aes(x = V1, color = NovartisQC, fill = NovartisQC)) +
+  geom_histogram() +
+  labs(x = "Tally of outliers") +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 15),
+    axis.title = ggplot2::element_text(size = 15)
+  ) +
+  scale_fill_manual(values = c("Red", "Blue"))
+
+histQC2
+```
+
+## Using Proper pairs percent {.tabset}
+
+### Uniquely mapped vs Proper Pairs Percent
+
+```{r}
+ggplot(as.data.frame(coldataBronch), aes(x = STAR_uniquely_mapped, y = RSeQC_proper_pairs_percent, color = Number_Outliers_Binned)) +
+  geom_point(size = 0.75) +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 14)
+  ) +
+  ggplot2::xlab(paste0("STAR Uniquely mapped")) +
+  ggplot2::ylab(paste0("RSeQC Proper Pairs (%)")) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 15), legend.text = ggplot2::element_text(size = 13)) +
+  ggplot2::guides(colour = ggplot2::guide_legend(override.aes = list(size = 2)))
+```
+
+### Proper Pairs Percent vs TIN median
+
+```{r}
+ggplot(as.data.frame(coldataBronch), aes(x = RSeQC_proper_pairs_percent, y = RSeQC_TIN_median, color = Number_Outliers_Binned)) +
+  geom_point(size = 0.75) +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 14)
+  ) +
+  ggplot2::xlab(paste0("RSeQC Proper Pairs (%)")) +
+  ggplot2::ylab(paste0("RSeQC TIN median")) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 15), legend.text = ggplot2::element_text(size = 13)) +
+  ggplot2::guides(colour = ggplot2::guide_legend(override.aes = list(size = 2)))
+
+```
+
+## PCA, QC outliers {.tabset}
+
+We used `r isNumeric` QC metrics and computed the PCA on z-scored values. We subsequently ran Pearson correlation test on PC 1-10 and the z-score of each QC metric to calculate which principal component each QC metric was most strongly associated to.
+
+### Outliers
+
+```{r}
+qcMetrics <- colDataBronchSubset
+
+qcMetrics.z <- t(scale(qcMetrics))
+qcMetrics.z.trim <- qcMetrics.z
+
+qcMetrics.z.trim[qcMetrics.z < -2] <- -2
+qcMetrics.z.trim[qcMetrics.z > 2] <- 2
+
+
+RIN <- annotBronch$RIN
+Number_Outliers_Binned <- as.factor(qualAnnot)
+Number_Outliers_Binned <- factor(Number_Outliers_Binned, levels = c("x =< 25",
+                                    "25 < x < 40",
+                                    "x >= 40"))
+
+Novartis_QC <- novartisQC
+
+z <- qcMetrics.z
+
+# run PCA
+pc <- prcomp(z, center = F, scale = F)
+
+forpcaBronch <- as.data.frame(pc$rotation[, 1:3])
+
+forpcaBronch$Number_Outliers_Binned <- Number_Outliers_Binned
+
+spc <- summary(pc)
+pc1Importance <- signif(spc$importance[2, 1] * 100, 3)
+pc2Importance <- signif(spc$importance[2, 2] * 100, 3)
+
+# pdf("~/PCA_Batch.pdf", width = 9)
+ggplot(forpcaBronch, aes(x = PC1, y = PC2, color = Number_Outliers_Binned)) +
+  geom_point(size = 0.75) +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 14)
+  ) +
+  ggplot2::xlab(paste0("PC1 (", pc1Importance, "%)")) +
+  ggplot2::ylab(paste0("PC2 (", pc2Importance, "%)")) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 15), legend.text = ggplot2::element_text(size = 13)) +
+  ggplot2::guides(colour = ggplot2::guide_legend(override.aes = list(size = 2)))
+```
+```{r}
+cor1 <- cor(pc$rotation[,1:10], t(qcMetrics.z), method = "pearson")
+
+cor1Res <- apply(cor1, 2, function(x){
+    return(names(which.max(abs(x))))
+})
+
+uniquePCs <- unique(cor1Res)[order(unique(cor1Res))]
+qcpc.list = list()
+for(x in 1:length(uniquePCs)){
+  pc <- uniquePCs[x]
+  qcpc.list[[pc]] = names(cor1Res)[cor1Res == pc]
+}
+
+QCPC.table <- plyr::ldply(qcpc.list, cbind)
+colnames(QCPC.table) <- c("PC", "Metric")
+
+QCPC.table %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(QCPC.table) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "250px")
+
+```
+
+Of all of the QC metrics, `r length(cor1Res[cor1Res == "PC1"])` were most associated, either positively or negatively, to PC1.
+
+### Outliers, Novartis
+
+```{r}
+forpcaBronch$Quality <- Novartis_QC
+
+# pdf("~/PCA_Batch.pdf", width = 9)
+ggplot(forpcaBronch, aes(x = PC1, y = PC2, color = Quality)) +
+  geom_point(size = 0.75) +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 14)
+  ) +
+  ggplot2::xlab(paste0("PC1 (", pc1Importance, "%)")) +
+  ggplot2::ylab(paste0("PC2 (", pc2Importance, "%)")) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 15), legend.text = ggplot2::element_text(size = 13)) +
+  ggplot2::guides(colour = ggplot2::guide_legend(override.aes = list(size = 2)))
+```
+
+## Heatmap, QC outliers
+
+The numeric QC metric values were z-scored across samples, plotted by heatmap. A total of `r isNumeric` QC metrics were used.
+
+```{r}
+
+RIN <- annotBronch$RIN
+Number_Outliers_Binned <- as.factor(qualAnnot)
+Number_Outliers_Binned <- factor(Number_Outliers_Binned, levels = c("x =< 25",
+                                    "25 < x < 40",
+                                    "x >= 40"))
+
+Novartis_QC <- novartisQC
+annotation_col <- data.frame(RIN, Number_Outliers_Binned, Novartis_QC)
+
+rownames(annotation_col) <- colnames(qcMetrics.z.trim)
+
+annotation_row <- data.frame(Correlated_PC = cor1Res)
+rownames(annotation_row) <- rownames(qcMetrics.z.trim)
+
+callback <- function(hc, mat) {
+  sv <- svd(t(mat))$v[, 1]
+  dend <- reorder(as.dendrogram(hc), wts = sv)
+  as.hclust(dend)
+}
+
+out <- pheatmap(qcMetrics.z.trim,
+  color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100),
+  annotation_col = annotation_col,
+  annotation_row = annotation_row,
+  legend = T,
+  show_rownames = F,
+  show_colnames = F,
+  fontsize_row = 9,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  clustering_callback = callback
+)
+
+out
+
+##Added 10/26/20. Used cutree to determine which samples to remove
+
+clusterLabels <- sort(cutree(out$tree_col, k=2))
+write.table(x = names(clusterLabels[clusterLabels == 2]),
+        file = "20201026_PoorQuality_Bronch.txt", sep = "\t")
+
+removed <- names(clusterLabels[clusterLabels == 2])
+```
+
+We split the dendrogram into 2 "branches" and considered all samples within the branch enriched for poor QC metrics to be of poor quality. These `r length(removed)` samples are the following: `r removed`
+
+
+## PCA, Batch Effect {.tabset}
+
+PCA was conducted on TPM counts. No evidence of batch effect can be seen in the PCA plot.
+
+### PC1 vs PC2
+
+```{r, warning = F, message = F}
+counts <- assays(seBronch)[[2]]
+
+counts <- counts[rowSums(counts) > 0, ]
+
+# z normalize
+z <- t(scale(t(counts)))
+# run PCA
+pc <- prcomp(z, center = F, scale = F)
+
+forpcaBronch <- as.data.frame(pc$rotation[, 1:3])
+
+forpcaBronch$Batch <- annotBronch$Batch
+
+spc <- summary(pc)
+pc1Importance <- signif(spc$importance[2, 1] * 100, 3)
+pc2Importance <- signif(spc$importance[2, 2] * 100, 3)
+pc3Importance <- signif(spc$importance[2, 3] * 100, 3)
+
+# pdf("~/PCA_Batch.pdf", width = 9)
+ggplot(forpcaBronch, aes(x = PC1, y = PC2, color = Batch)) +
+  geom_point(size = 0.75) +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 14)
+  )  +
+  ggplot2::xlab(paste0("PC1 (", pc1Importance, "%)")) +
+  ggplot2::ylab(paste0("PC2 (", pc2Importance, "%)")) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 15), legend.text = ggplot2::element_text(size = 13)) +
+  ggplot2::guides(colour = ggplot2::guide_legend(override.aes = list(size = 2)))
+# dev.off()
+```
+
+### PC1 vs PC3
+
+```{r, warning = F, message = F}
+# PCA: PC1 vs PC3
+ggplot(forpcaBronch, aes(x = PC1, y = PC3, color = Batch)) +
+  geom_point(size = 0.75) +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 14)
+  )  +
+  ggplot2::xlab(paste0("PC1 (", pc1Importance, "%)")) +
+  ggplot2::ylab(paste0("PC3 (", pc3Importance, "%)")) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 15), legend.text = ggplot2::element_text(size = 13)) +
+  ggplot2::guides(colour = ggplot2::guide_legend(override.aes = list(size = 2)))
+```
+
+### QC outliers
+
+```{r, warning = F, message = F}
+forpcaBronch <- cbind(forpcaBronch, qc.tally.gg)
+ggplot(forpcaBronch, aes(x = PC1, y = PC2, color = Number_Outliers_Binned)) +
+  geom_point(size = 0.75) +
+  geom_point(
+    data = subset(forpcaBronch, Number_Outliers_Binned == "x => 25"),
+    aes(x = PC1, y = PC2, color = Number_Outliers_Binned)
+  ) +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 14)
+  )  +
+  ggplot2::xlab(paste0("PC1 (", pc1Importance, "%)")) +
+  ggplot2::ylab(paste0("PC2 (", pc2Importance, "%)")) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 15), legend.text = ggplot2::element_text(size = 13)) +
+  ggplot2::guides(colour = ggplot2::guide_legend(override.aes = list(size = 2)))
+```
+
+## Sex status
+
+```{r, warning = F, message = F}
+sex.genes <- c("KDM5D", "UTY", "DDX3Y", "USP9Y", "TXLNG2P", "RPS4Y1", "XIST")
+sex.genes.id <- match(sex.genes, rowRanges(seBronch)$external_gene_id)
+
+Gender <- annotBronch$PERSON_GENDER
+Sample_Type <- annotBronch$`Sample Type`
+Gender <- gsub(" Gender", "", Gender)
+annotation_col <- data.frame(Gender, Sample_Type)
+
+counts <- assays(seBronch)$TPM
+rownames(counts) <- rowRanges(seBronch)$external_gene_id
+
+genes1 <- counts[sex.genes.id, ]
+
+genes1.z <- t(scale(t(genes1)))
+genes1.z.trim <- genes1.z
+genes1.z.trim[genes1.z < -2] <- -2
+genes1.z.trim[genes1.z > 2] <- 2
+
+rownames(annotation_col) <- colnames(genes1.z.trim)
+
+callback <- function(hc, mat) {
+  sv <- svd(t(mat))$v[, 1]
+  dend <- reorder(as.dendrogram(hc), wts = sv)
+  as.hclust(dend)
+}
+
+out <- pheatmap(genes1.z.trim,
+  color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100),
+  annotation_col = annotation_col,
+  legend = T,
+  show_rownames = T,
+  show_colnames = F,
+  fontsize_row = 9,
+  cluster_rows = FALSE,
+  cluster_cols = TRUE,
+  clustering_callback = callback
+)
+
+exprs.male <- which(genes1.z.trim["KDM5D", ] > 1)
+record.female <- which(annotBronch$PERSON_GENDER == "Female Gender")
+sex.discrepancy <- annotBronch$`Kit Number`[intersect(exprs.male, record.female)]
+
+out
+```
+The patient expressing male sex genes, but annotated female, is `r sex.discrepancy`
+
+## Demographics Comparison
+
+General annotation data of patients were compared between those of which samples were removed due to outliers, and those that were retained.
+
+```{r, warning = FALSE, message = FALSE}
+seBronchQC <- seBronch[, !colnames(seBronch) %in% highAmountOutlier]
+annotBronchQC <- annotBronch[!annotBronch$`RNA Sample ID` %in% highAmountOutlier, ]
+
+seBronchQCOut <- seBronch[, colnames(seBronch) %in% highAmountOutlier]
+annotBronchQCOut <- annotBronch[annotBronch$`RNA Sample ID` %in% highAmountOutlier, ]
+
+lab <- c(
+  rep("Retained", length(annotBronchQC$GRPB_SMK_STS)),
+  rep("Removed", length(annotBronchQCOut$GRPB_SMK_STS))
+)
+# AGE
+mean.age <- mean(annotBronchQC$AGE)
+sd.age <- sd(annotBronchQC$AGE)
+
+age <- paste0(signif(mean.age, 3), " +/- ", signif(sd.age, 3))
+
+mean.age.rm <- mean(annotBronchQCOut$AGE)
+sd.age.rm <- sd(annotBronchQCOut$AGE)
+
+age.rm <- paste0(signif(mean.age.rm, 3), " +/- ", signif(sd.age.rm, 3))
+
+age.pvalue <- signif(wilcox.test(annotBronchQC$AGE, annotBronchQCOut$AGE)$p.value, 3)
+
+demo.table <- c(age, age.rm, age.pvalue)
+
+# Gender
+gstatus <- c(annotBronchQC$PERSON_GENDER, annotBronchQCOut$PERSON_GENDER)
+
+male.ct <- sum(annotBronchQC$PERSON_GENDER == "Male Gender")
+male.pct <- signif(male.ct / length(annotBronchQC$PERSON_GENDER), 3) * 100
+male <- paste0("Male: ", male.ct, "(", male.pct, "%)")
+
+male.ct.rm <- sum(annotBronchQCOut$PERSON_GENDER == "Male Gender")
+male.pct.rm <- signif(male.ct.rm / length(annotBronchQCOut$PERSON_GENDER), 3) * 100
+male.rm <- paste0("Male: ", male.ct.rm, "(", male.pct.rm, "%)")
+
+gender.pvalue <- signif(chisq.test(table(lab, gstatus))$p.value, 3)
+
+demo.table <- rbind(demo.table, c(male, male.rm, gender.pvalue))
+
+# FEVFVC
+mean.fevfvc <- mean(annotBronchQC$FEV_FVC)
+sd.fevfvc <- sd(annotBronchQC$FEV_FVC)
+
+fevfvc <- paste0(signif(mean.fevfvc, 3), " +/- ", signif(sd.fevfvc, 3))
+
+mean.fevfvc.rm <- mean(annotBronchQCOut$FEV_FVC)
+sd.fevfvc.rm <- sd(annotBronchQCOut$FEV_FVC)
+
+fevfvc.rm <- paste0(signif(mean.fevfvc.rm, 3), " +/- ", signif(sd.fevfvc.rm, 3))
+
+fevfvc.pvalue <- signif(wilcox.test(annotBronchQC$FEV_FVC, annotBronchQCOut$FEV_FVC)$p.value, 3)
+
+demo.table <- rbind(demo.table, c(fevfvc, fevfvc.rm, fevfvc.pvalue))
+
+# Smoking Status
+smk <- c(annotBronchQC$GRPB_SMK_STS, annotBronchQCOut$GRPB_SMK_STS)
+
+annotBronchQC$GRPB_SMK_STS <- gsub(" ", "_", annotBronchQC$GRPB_SMK_STS)
+annotBronchQCOut$GRPB_SMK_STS <- gsub(" ", "_", annotBronchQCOut$GRPB_SMK_STS)
+
+smkstatus.na <- sum(is.na(annotBronchQC$GRPB_SMK_STS == "Current_Smoker"))
+
+smkstatus.ct <- sum(annotBronchQC[!is.na(annotBronchQC$GRPB_SMK_STS), ]$GRPB_SMK_STS == "Current_Smoker")
+smkstatus.pct <- signif(smkstatus.ct / nrow(annotBronchQC[!is.na(annotBronchQC$GRPB_SMK_STS), ]), 3) * 100
+smkstatus <- paste0("Current: ", smkstatus.ct, "(", smkstatus.pct, "%)")
+
+smkstatus.ct.rm <- sum(annotBronchQCOut$GRPB_SMK_STS == "Current_Smoker")
+smkstatus.pct.rm <- signif(smkstatus.ct.rm / length(annotBronchQCOut$GRPB_SMK_STS), 3) * 100
+smkstatus.rm <- paste0("Current: ", smkstatus.ct.rm, "(", smkstatus.pct.rm, "%)")
+
+smkstatus.pvalue <- signif(chisq.test(table(lab, smk))$p.value, 3)
+
+demo.table <- rbind(demo.table, c(smkstatus, smkstatus.rm, smkstatus.pvalue))
+
+rownames(demo.table) <- c("Age", "Gender", "FEV1/FVC", "Smoking Status")
+colnames(demo.table) <- c("Retained", "Removed", "p-value")
+
+demo.table %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(demo.table) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling()
+```
+
+
+## Differential Expression, Smoking status {.tabset}
+
+DESeq2 was run (Model: ~ Smoking Status) on both expression data prior to and after filtering possible outliers.
+
+### Pre-filter
+
+```{r, warning = FALSE, message = FALSE, eval=T}
+counts <- assay(seBronch)
+rownames(counts) <- rowRanges(seBronch)$external_gene_id
+
+counts <- apply(counts, 1:2, function(x) {
+  return(as.integer(x))
+})
+
+no.smk.status.ix <- which(is.na(annotBronch$GRPB_SMK_STS))
+
+counts <- counts[, -no.smk.status.ix]
+annotBronch <- annotBronch[-no.smk.status.ix, ]
+annotBronch$GRPB_SMK_STS <- gsub(" ", "_", annotBronch$GRPB_SMK_STS)
+
+dds <- DESeqDataSetFromMatrix(
+  countData = counts,
+  colData = annotBronch,
+  design = ~GRPB_SMK_STS
+)
+dds$GRPB_SMK_STS <- relevel(dds$GRPB_SMK_STS, ref = "Former_Smoker")
+
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep, ]
+dds <- DESeq(dds)
+res <- results(dds)
+
+resOrdered <- res[order(res$pvalue), ]
+
+resOrdered <- as.data.frame(resOrdered)
+resOrdered$nLogPVal <- -log10(resOrdered$padj)
+resSig <- resOrdered %>%
+  filter(padj < 0.05) %>%
+  filter(abs(log2FoldChange) > 0.5)
+numSig <- nrow(resSig)
+numUp <- nrow(resSig[resSig$log2FoldChange > 0.5, ])
+numDown <- nrow(resSig[resSig$log2FoldChange < -0.5, ])
+
+labels <- sapply(rownames(resOrdered), function(x) {
+  if (x %in% c("CYP1A1", "CYP1B1")) {
+    return("red")
+  } else {
+    return("black")
+  }
+})
+
+labeltxt <- sapply(rownames(resOrdered), function(x) {
+  if (x %in% c("CYP1A1")) {
+    return("CYP1A1")
+  } else if (x %in% c("CYP1B1")) {
+    return("CYP1B1")
+  } else {
+    return("")
+  }
+})
+
+resOrderedCYP <- resOrdered[c("CYP1A1", "CYP1B1"), ]
+
+ggplot(resOrdered, aes(x = log2FoldChange, y = nLogPVal)) +
+  geom_point(size = 0.75) +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 14)
+  ) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 15), legend.text = ggplot2::element_text(size = 13)) +
+  ggplot2::guides(
+    colour =
+      ggplot2::guide_legend(override.aes = list(size = 2))
+  ) + geom_point(data = resSig, aes(x = log2FoldChange, y = nLogPVal), color = "Red",
+                 size = 0.75) +
+  geom_point(data = resOrderedCYP, aes(x = log2FoldChange, y = nLogPVal), color = "blue") +
+  ggrepel::geom_text_repel(aes(x = log2FoldChange, y = nLogPVal), label = labeltxt) +
+  ggplot2::labs(y = "-log10(Adjusted p-value)") +
+  ggplot2::ggtitle(label = "Smoking status, Former vs Current") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+```
+
+```{r}
+# genenameTable <- as.data.frame(as.matrix(rowRanges(seBronch)$external_gene_id))
+# 
+# genenameTable$ensembleGeneId <- rownames(assay(seBronch))
+# 
+# resOrderedPreFilter <- resOrdered[match(genenameTable$V1, rownames(resOrdered)),]
+# rownames(resOrderedPreFilter) <- genenameTable$ensembleGeneId
+# 
+# rownames(limmaRes) <- gsub(pattern = "_at", "", rownames(limmaRes))
+# 
+# limmaRes <- limmaRes[match(genenameTable$ensembleGeneId, rownames(limmaRes)),]
+# 
+# genelistIntersect <- intersect(rownames(limmaRes), rownames(resOrderedPreFilter))
+# 
+# limmaRes <- limmaRes[genelistIntersect,]
+# resOrderedPreFilter <- resOrderedPreFilter[genelistIntersect,]
+# 
+# logfcTable <- as.data.frame(cbind(limmaRes$logFC, resOrderedPreFilter$log2FoldChange))
+# colnames(logfcTable) <- c("Steiling", "DECAMP")
+# summary(lm(DECAMP ~ Steiling, logfcTable))
+```
+
+
+### Post-filter
+
+```{r, warning = FALSE, message = FALSE, eval=T}
+counts <- assay(seBronchQC)
+rownames(counts) <- rowRanges(seBronch)$external_gene_id
+
+counts <- apply(counts, 1:2, function(x) {
+  return(as.integer(x))
+})
+
+annotBronchQC$GRPB_SMK_STS <- gsub(" ", "_", annotBronchQC$GRPB_SMK_STS)
+
+no.smk.status.ix <- which(is.na(annotBronchQC$GRPB_SMK_STS))
+
+counts <- counts[, -no.smk.status.ix]
+annotBronchQC <- annotBronchQC[-no.smk.status.ix, ]
+
+dds <- DESeqDataSetFromMatrix(
+  countData = counts,
+  colData = annotBronchQC,
+  design = ~GRPB_SMK_STS
+)
+dds$GRPB_SMK_STS <- relevel(dds$GRPB_SMK_STS, ref = "Former_Smoker")
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep, ]
+dds <- DESeq(dds)
+res <- results(dds)
+# res
+
+resOrdered <- res[order(res$pvalue), ]
+# resOrdered
+resOrdered <- as.data.frame(resOrdered)
+resOrdered$nLogPVal <- -log10(resOrdered$padj)
+resSig <- resOrdered %>%
+  filter(padj < 0.05) %>%
+  filter(abs(log2FoldChange) > 0.5)
+numSigQC <- nrow(resSig)
+numUpQC <- nrow(resSig[resSig$log2FoldChange > 0.5, ])
+numDownQC <- nrow(resSig[resSig$log2FoldChange < -0.5, ])
+
+labeltxt <- sapply(rownames(resOrdered), function(x) {
+  if (x %in% c("CYP1A1")) {
+    return("CYP1A1")
+  } else if (x %in% c("CYP1B1")) {
+    return("CYP1B1")
+  } else {
+    return("")
+  }
+})
+
+resOrderedCYP <- resOrdered[c("CYP1A1", "CYP1B1"), ]
+
+ggplot(resOrdered, aes(x = log2FoldChange, y = nLogPVal)) +
+  geom_point(size = 0.75) +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 14)
+  ) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 15), legend.text = ggplot2::element_text(size = 13)) +
+  ggplot2::guides(
+    colour =
+      ggplot2::guide_legend(override.aes = list(size = 2))
+  ) + geom_point(data = resSig, aes(x = log2FoldChange, y = nLogPVal), color = "Red",
+                 size = 0.75) +
+  geom_point(data = resOrderedCYP, aes(x = log2FoldChange, y = nLogPVal), color = "blue") +
+  ggrepel::geom_text_repel(aes(x = log2FoldChange, y = nLogPVal), label = labeltxt) +
+  ggplot2::labs(y = "-log10(Adjusted p-value)") +
+  ggplot2::ggtitle(label = "Smoking status, Former vs Current") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+
+```
+
+## {.unlisted .unnumbered}
+
+A total of `r numSig`(`r numUp` Upregulated, `r numDown` Downregulated) and `r numSigQC`(`r numUpQC` Upregulated, `r numDownQC` Downregulated) were differentially expressed pre- and post- filter, respectively(padj < 0.05, abs(log2FC) > 0.5).
+
+## Reproducibility
+
+<details><summary>For reproducibility:</summary>
+
+```{r, warning = F, message = F}
+## datetime
+
+Sys.time()
+```
+
+```{r, warning = F, message = F}
+## session info
+
+sessionInfo()
+```
+</details>
