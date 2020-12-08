@@ -1,0 +1,1215 @@
+---
+title: "1st-pass analysis of Novartis DECAMP2 Bronchial Brushings RNA-seq data"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: true
+    fig_width: 9
+    fig_height: 6
+    theme: cosmo
+geometry: margin=1in
+---
+
+# Preprocessing
+
+Based off of prior QC ("20201025_DECAMP2_Novartis_QC_Bronch.Rmd"), we have identified several poor quality samples. We will remove these samples prior to any downstream analysis.
+
+```{r, message = FALSE, warning=FALSE}
+# Load library:
+library(plyr)
+library(SummarizedExperiment)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(pheatmap)
+library("RColorBrewer")
+library(DESeq2)
+library(knitr)
+library(kableExtra)
+library(enrichR)
+library(biomaRt)
+library(affy)
+library(limma)
+
+set.seed("12345")
+
+# Load data:
+se <- readRDS("/restricted/projectnb/pulmseq/Novartis/processing/work/28/da9dcb4ebb5f902c53fff1bc1ebdc2/Novartis_Gene_Expression.rds")
+colnames(se) <- gsub(pattern = "_.*", "", colnames(se))
+
+# Load annotation:
+
+# Matches sample ID to kitnumber + Has batch info
+annotManifest <- read_excel("/restricted/projectnb/pulmseq/Novartis/annotation/Novartis_RNASeq_run_manifest.xlsx")
+
+# Matches sample ID to sample type/RIN (received from Jack, 8/24/20)
+annotSampleEM0 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM0", skip = 2)
+
+annotSampleEM5 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM5", skip = 2)
+
+annotSampleEM6 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM6", skip = 2)
+
+annotSampleEM8 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM8", skip = 3)
+
+annotSampleEM15 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM15", skip = 3)
+
+annotSampleEM16 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "EM16", skip = 3)
+
+annotSampleN1 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "N1", skip = 3)
+
+annotSampleN2 <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/Annotation/RNA_data_for_Yusuke_08_24_20.xlsx", sheet = "N2", skip = 3)
+
+# Combine Jack's sample-based annotation file into one dataframe
+annotSampleEM0 <- annotSampleEM0[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Original Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM0) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleEM5 <- annotSampleEM5[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Patient ID", "Patient ID", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM5) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleEM6 <- annotSampleEM6[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM6) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleEM8 <- annotSampleEM8[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Original Sample ID", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM8) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleEM15 <- annotSampleEM15[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM15) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleEM16 <- annotSampleEM16[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleEM16) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleN1 <- annotSampleN1[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleN1) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+annotSampleN2 <- annotSampleN2[, c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)]
+colnames(annotSampleN2) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+
+allAnnotSamples <- ls()[grep("annotSample", ls())]
+annotSample <- as.data.frame(matrix(ncol = 8))
+colnames(annotSample) <- c(
+  "RNA Sample ID", "DECAMP #",
+  "Sample ID", "Kit Number", "Sample Type",
+  "Isolation Date", "RIN", "DV200 (%)"
+)
+# Combine
+for (x in allAnnotSamples) {
+  annotSamples <- get(x)
+  annotSamples$`Isolation Date` <- as.character(annotSamples$`Isolation Date`)
+  annotSample <- rbind(annotSample, annotSamples)
+}
+annotSample <- annotSample[-which(is.na(annotSample$`RNA Sample ID`)), ]
+annotSample <- annotSample[-which(is.na(annotSample$`Sample Type`)), ]
+
+annotSample <- annotSample[-which(duplicated(annotSample$`RNA Sample ID`)), ]
+
+# Save which samples had wrong rRNA peak when checking RIN
+wrongRRNA.ix <- grep(pattern = "rong rRNA peak", annotSample$RIN)
+annotSample$wrongRNAPeak <- 0
+annotSample$wrongRNAPeak[wrongRRNA.ix] <- 1
+
+# Edit RIN section to convert into numeric vector
+annotSample$RIN <- gsub(pattern = "(wrong rRNA peak)", replacement = "", annotSample$RIN, fixed = TRUE)
+annotSample$RIN <- gsub(pattern = "(wrong RNA peak)", replacement = "", annotSample$RIN, fixed = TRUE)
+annotSample$RIN <- gsub(pattern = "(wrong rRNA peaks)", replacement = "", annotSample$RIN, fixed = TRUE)
+annotSample$RIN <- gsub(pattern = "(Wrong rRNA peak)", replacement = "", annotSample$RIN, fixed = TRUE)
+annotSample$RIN <- gsub(pattern = "(Wrong rRNA peaks)", replacement = "", annotSample$RIN, fixed = TRUE)
+annotSample$RIN <- gsub(pattern = "\\/NA", replacement = "", annotSample$RIN)
+annotSample$RIN <- gsub(pattern = ".*\\/", replacement = "", annotSample$RIN)
+annotSample$RIN <- as.numeric(annotSample$RIN)
+# There is a "29", probably 2.9, will ask Jack
+annotSample$RIN[annotSample$RIN == 29] <- 2.9
+
+# Consolidate nasal/bronch terms
+annotSample$`Sample Type` <- gsub(pattern = ".*Bronch.*", replacement = "Bronchial Brushings", annotSample$`Sample Type`)
+annotSample$`Sample Type` <- gsub(pattern = ".*Nasal.*", replacement = "Nasal Brushings", annotSample$`Sample Type`)
+
+annotManifest <- filter(annotManifest, Run == "Run 1")
+annotSample <- annotSample[annotSample$`RNA Sample ID` %in% annotManifest$Sample, ]
+annotSample <- annotSample[match(annotSample$`RNA Sample ID`, annotManifest$Sample), ]
+
+# Removing duplicate column
+annotManifest$`Kit Number` <- NULL
+
+annot <- cbind(annotManifest, annotSample)
+
+# Clinical info:
+
+# Matches kitnumber to randID, "Novartis_datadump"
+annotDataDump2 <- read_excel("/restricted/projectnb/decamp/annotation/20200920/FullDECAMP2_DataDump_20200920.xlsx", sheet = "_D2CASEMAP", )
+
+# randID to demographics info, "Novartis_datadump"
+annotDataDump3 <- read_excel("/restricted/projectnb/decamp/annotation/20200920/FullDECAMP2_DataDump_20200920.xlsx", sheet = "_D2DEMO")
+
+# randID to age/smoking info, "Novartis_datadump"
+annotDataDump4 <- read_excel("/restricted/projectnb/decamp/annotation/20200920/FullDECAMP2_DataDump_20200920.xlsx", sheet = "_D2ELIGCHECK")
+
+# randID to FEV/FVC, "Novartis_datadump"
+annotDataDump5 <- read_excel("/restricted/projectnb/decamp/annotation/20200920/FullDECAMP2_DataDump_20200920.xlsx", sheet = "_D2PFT")
+annotDataDump5 <- filter(annotDataDump5, timepoint == "Baseline Visit")
+
+# Combine annotation info
+annotA <- merge(merge(annotDataDump2, annotDataDump3, by.x = "randID", by.y = "randID"), annotDataDump4, by.x = "randID", by.y = "randID")
+annotA <- merge(annotA, annotDataDump5, by.x = "randID", by.y = "randID")
+
+# Removing patient "4796-053" as "Pacific Islander" for time being
+annotA <- annotA[!(duplicated(annotA$randID)), ]
+
+annot <- merge(annot, annotA, by.x = "Kit Number", by.y = "kitnumber", all.x = TRUE)
+
+annotBronch <- annot[annot$`Sample Type` == "Bronchial Brushings", ]
+annotNasal <- annot[annot$`Sample Type` == "Nasal Brushings", ]
+
+uniquePatients <- length(unique(annot$`Kit Number`))
+
+numBronch <- length(unique(annotBronch$Sample))
+numNasal <- length(unique(annotNasal$Sample))
+
+bothBronchNasal <- length(intersect(annotBronch$`Kit Number`, annotNasal$`Kit Number`))
+
+#Steiling signature genes
+steilingGenes <- read_excel("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Analysis/1stPass/Steiling_2013_Genelist.xlsx", sheet = "GeneList", col_names = FALSE)
+```
+There are `r length(annot$Sample)` samples and `r uniquePatients` unique patients in the dataset. `r numNasal` are nasal samples. There are `r bothBronchNasal` patients that have both bronchial and nasal samples.
+
+
+```{r, warning = F, message = F}
+# Samples flagged by Novartis as poor quality:
+# flaggedByNovartis <- c(
+#   "EM15-14", "EM15-31", "EM15-64", "EM15-85", "EM16-194", "EM16-195",
+#   "EM16-228", "EM5-100", "EM8-112", "EM8-130", "EM8-158", "EM8-171",
+#   "EM8-26", "EM8-55", "EM8-66", "N1-115", "N1-119", "N1-125",
+#   "N1-139", "N1-25", "N1-40", "N1-55", "N1-63", "N1-64",
+#   "N1-67", "N1-81", "N1-83", "N1-84", "N1-94", "N2-10",
+#   "N2-15", "N2-18", "N2-30", "N2-31", "N2-22", "N2-28"
+# )
+
+poorQuality <- read.table("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Analysis/QC/20201026_PoorQuality_Bronch.txt")
+
+seBronch <- se[, which(colnames(se) %in% annotBronch$`RNA Sample ID`)]
+orig.num.samples <- ncol(seBronch) 
+
+#Remove:
+seBronch <- seBronch[,!colnames(seBronch) %in% poorQuality$x]
+filt.num.samples <- ncol(seBronch) 
+
+annotBronch <- annotBronch[annotBronch$`RNA Sample ID` %in% colnames(se), ]
+
+# reorder
+annotBronch <- annotBronch[match(colnames(seBronch), annotBronch$`RNA Sample ID`), ]
+
+coldataBronch <- colData(seBronch)
+annotBronch$TIN <- colData(seBronch)$RSeQC_TIN_mean
+```
+
+Originally, there were `r orig.num.samples` samples. Upon filtering, we will use `r filt.num.samples` samples for downstream analysis.
+
+```{r, message = F, warning = F}
+counts <- assay(seBronch)
+rownames(counts) <- rowRanges(seBronch)$external_gene_id
+
+counts <- apply(counts, 1:2, function(x) {
+  return(as.integer(x))
+})
+
+# arglist <- list(x=annotBronch$FEV_RS_PER,y=annotBronch$FEV_FVC)
+# statusfxn <- function(x,y) {
+#   if (x < 80 && y < 0.7) {
+#     return("COPD")
+#   } else {
+#     return("NO_COPD")
+#   }
+# }
+# copd.status <- sapply(arglist, statusfxn, x = x, y = y)
+
+copd.status <- c()
+for(x in 1:nrow(annotBronch)){
+  if(annotBronch[x, "FEV_RS_PER"] < 80 && 
+     annotBronch[x, "FEV_FVC"] < 0.7){
+        copd.status <- c(copd.status, "COPD")
+  }else{
+       copd.status <- c(copd.status, "NO_COPD")
+     }
+}
+
+annotBronch$COPD_status <- as.factor(copd.status)
+
+annotBronch$GRPB_SMK_STS <- gsub(" ", "_", annotBronch$GRPB_SMK_STS)
+
+no.smk.status.ix <- which(is.na(annotBronch$GRPB_SMK_STS))
+
+counts <- counts[, -no.smk.status.ix]
+annotBronch <- annotBronch[-no.smk.status.ix, ]
+```
+
+`r length(no.smk.status.ix)` samples were removed due to lack of smoker status.
+
+# Clinical annotation
+
+General annotation data of patients were compared between those of which samples of FEV1 predicted < 80 (COPD) and FEV1 predicted > 80 (NO COPD).
+
+```{r, warning = FALSE, message = FALSE}
+#Rename race
+annotBronch$RACE_CAT_TXT <- gsub("Unknown","Not Reported",annotBronch$RACE_CAT_TXT)
+annotBronch$RACE_CAT_TXT <- gsub("Black or Afr. American",
+                                 "Black/African American",annotBronch$RACE_CAT_TXT)
+annotBronch$RACE_CAT_TXT <- gsub("Native Hawaiian or Other Pacific Islander",
+                                 "Pacific Islander",annotBronch$RACE_CAT_TXT)
+annotBronch$RACE_CAT_TXT <- gsub("American Indian or Alaska Native",
+                                 "Native American",annotBronch$RACE_CAT_TXT)
+annotBronch$RACE_CAT_TXT <- as.factor(annotBronch$RACE_CAT_TXT)
+
+annotBronch_COPD <- annotBronch[annotBronch$COPD_status == "COPD", ]
+
+annotBronch_NO_COPD <- annotBronch[annotBronch$COPD_status == "NO_COPD", ]
+
+lab <- c(
+  rep("Retained", length(annotBronch_COPD$GRPB_SMK_STS)),
+  rep("Removed", length(annotBronch_NO_COPD$GRPB_SMK_STS))
+)
+# AGE
+mean.age <- mean(annotBronch_COPD$AGE)
+sd.age <- sd(annotBronch_COPD$AGE)
+
+age <- paste0(signif(mean.age, 3), " +/- ", signif(sd.age, 3))
+
+mean.age.rm <- mean(annotBronch_NO_COPD$AGE)
+sd.age.rm <- sd(annotBronch_NO_COPD$AGE)
+
+age.rm <- paste0(signif(mean.age.rm, 3), " +/- ", signif(sd.age.rm, 3))
+
+age.pvalue <- signif(wilcox.test(annotBronch_COPD$AGE, annotBronch_NO_COPD$AGE)$p.value, 3)
+
+demo.table <- c(age, age.rm, age.pvalue)
+
+# Gender
+gstatus <- c(annotBronch_COPD$PERSON_GENDER, annotBronch_NO_COPD$PERSON_GENDER)
+
+male.ct <- sum(annotBronch_COPD$PERSON_GENDER == "Male Gender")
+male.pct <- signif(male.ct / length(annotBronch_COPD$PERSON_GENDER), 3) * 100
+male <- paste0("Male: ", male.ct, "(", male.pct, "%)")
+
+male.ct.rm <- sum(annotBronch_NO_COPD$PERSON_GENDER == "Male Gender")
+male.pct.rm <- signif(male.ct.rm / length(annotBronch_NO_COPD$PERSON_GENDER), 3) * 100
+male.rm <- paste0("Male: ", male.ct.rm, "(", male.pct.rm, "%)")
+
+gender.pvalue <- signif(chisq.test(table(lab, gstatus))$p.value, 3)
+
+demo.table <- rbind(demo.table, c(male, male.rm, gender.pvalue))
+
+# FEV1 predicted
+mean.fev1p <- mean(annotBronch_COPD$FEV_RS_PER)
+sd.fev1p <- sd(annotBronch_COPD$FEV_RS_PER)
+
+fev1p <- paste0(signif(mean.fev1p, 3), " +/- ", signif(sd.fev1p, 3))
+
+mean.fev1p.rm <- mean(annotBronch_NO_COPD$FEV_RS_PER)
+sd.fev1p.rm <- sd(annotBronch_NO_COPD$FEV_RS_PER)
+
+fev1p.rm <- paste0(signif(mean.fev1p.rm, 3), " +/- ", signif(sd.fev1p.rm, 3))
+
+fev1p.pvalue <- signif(wilcox.test(annotBronch_COPD$FEV_RS_PER, annotBronch_NO_COPD$FEV_RS_PER)$p.value, 3)
+
+demo.table <- rbind(demo.table, c(fev1p, fev1p.rm, fev1p.pvalue))
+
+# FEVFVC
+mean.fevfvc <- mean(annotBronch_COPD$FEV_FVC)
+sd.fevfvc <- sd(annotBronch_COPD$FEV_FVC)
+
+fevfvc <- paste0(signif(mean.fevfvc, 3), " +/- ", signif(sd.fevfvc, 3))
+
+mean.fevfvc.rm <- mean(annotBronch_NO_COPD$FEV_FVC)
+sd.fevfvc.rm <- sd(annotBronch_NO_COPD$FEV_FVC)
+
+fevfvc.rm <- paste0(signif(mean.fevfvc.rm, 3), " +/- ", signif(sd.fevfvc.rm, 3))
+
+fevfvc.pvalue <- signif(wilcox.test(annotBronch_COPD$FEV_FVC, annotBronch_NO_COPD$FEV_FVC)$p.value, 3)
+
+demo.table <- rbind(demo.table, c(fevfvc, fevfvc.rm, fevfvc.pvalue))
+
+# TIN
+mean.tin <- mean(annotBronch_COPD$TIN)
+sd.tin <- sd(annotBronch_COPD$TIN)
+
+tin <- paste0(signif(mean.tin, 3), " +/- ", signif(sd.tin, 3))
+
+mean.tin.rm <- mean(annotBronch_NO_COPD$TIN)
+sd.tin.rm <- sd(annotBronch_NO_COPD$TIN)
+
+tin.rm <- paste0(signif(mean.tin.rm, 3), " +/- ", signif(sd.tin.rm, 3))
+
+tin.pvalue <- signif(wilcox.test(annotBronch_COPD$TIN, annotBronch_NO_COPD$TIN)$p.value, 3)
+
+demo.table <- rbind(demo.table, c(tin, tin.rm, tin.pvalue))
+
+# Smoking Status
+smk <- c(annotBronch_COPD$GRPB_SMK_STS, annotBronch_NO_COPD$GRPB_SMK_STS)
+
+annotBronch_COPD$GRPB_SMK_STS <- gsub(" ", "_", annotBronch_COPD$GRPB_SMK_STS)
+annotBronch_NO_COPD$GRPB_SMK_STS <- gsub(" ", "_", annotBronch_NO_COPD$GRPB_SMK_STS)
+
+smkstatus.na <- sum(is.na(annotBronch_COPD$GRPB_SMK_STS == "Current_Smoker"))
+
+smkstatus.ct <- sum(annotBronch_COPD[!is.na(annotBronch_COPD$GRPB_SMK_STS), ]$GRPB_SMK_STS == "Current_Smoker")
+smkstatus.pct <- signif(smkstatus.ct / nrow(annotBronch_COPD[!is.na(annotBronch_COPD$GRPB_SMK_STS), ]), 3) * 100
+smkstatus <- paste0("Current: ", smkstatus.ct, "(", smkstatus.pct, "%)")
+
+smkstatus.ct.rm <- sum(annotBronch_NO_COPD$GRPB_SMK_STS == "Current_Smoker")
+smkstatus.pct.rm <- signif(smkstatus.ct.rm / length(annotBronch_NO_COPD$GRPB_SMK_STS), 3) * 100
+smkstatus.rm <- paste0("Current: ", smkstatus.ct.rm, "(", smkstatus.pct.rm, "%)")
+
+smkstatus.pvalue <- signif(chisq.test(table(lab, smk))$p.value, 3)
+
+demo.table <- rbind(demo.table, c(smkstatus, smkstatus.rm, smkstatus.pvalue))
+
+rownames(demo.table) <- c("Age", "Gender", "FEV1 Predicted(%)" , "FEV1/FVC", "TIN", "Smoking Status")
+colnames(demo.table) <- c("COPD", "NO COPD", "p-value")
+
+copd.race.table <- as.data.frame(table(annotBronch_COPD$RACE_CAT_TXT))
+rownames(copd.race.table) <- copd.race.table$Var1
+copd.race.table$Var1 <- NULL
+
+nocopd.race.table <- as.data.frame(table(annotBronch_NO_COPD$RACE_CAT_TXT))
+rownames(nocopd.race.table) <- nocopd.race.table$Var1
+nocopd.race.table$Var1 <- NULL
+
+race.table <- cbind(copd.race.table, nocopd.race.table)
+race.table <- race.table[c(6, 2, 1, 5, 3, 4),]
+colnames(race.table) <- c("COPD", "NO COPD")
+race.table$`p-value` <- c(signif(chisq.test(race.table)$p.value, 3),
+                        rep("", nrow(race.table) - 1))
+
+blank <- as.data.frame(matrix("", ncol = 3))
+colnames(blank) <- c("COPD", "NO COPD", "p-value")
+rownames(blank) <- "Race"
+
+race.table <- rbind(blank,race.table)
+
+demo.table <- rbind(demo.table, race.table)
+
+demo.table %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(demo.table) + 1),
+    row.names = TRUE
+  ) %>%
+  add_indent(c(8:13)) %>%
+  kableExtra::kable_styling()
+```
+
+# Differential Expression 
+
+## Using COPD as continuous variable {.tabset}
+
+Differential expression was conducted using the DESeq2 package to compare patients with low FEV1pred values (< 80) and high values. The FEV1 predicted values are used as a proxy for COPD status. Expected counts outputted from the RSEM algorithm was taken for DESeq2. 
+
+Model used: ~Smoking status + Age + TIN + FEV1 predicted
+
+```{r, message = F, warning = F}
+dds <- DESeqDataSetFromMatrix(
+  countData = counts,
+  colData = annotBronch,
+  design = ~GRPB_SMK_STS + AGE + TIN + FEV_RS_PER
+)
+
+dds$GRPB_SMK_STS <- relevel(dds$GRPB_SMK_STS, ref = "Former_Smoker")
+
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep, ]
+dds <- DESeq(dds)
+res <- results(dds)
+
+res$nLogPVal <- -log10(res$padj)
+
+resOrdered <- res[order(res$pvalue), ]
+resOrdered <- as.data.frame(resOrdered)
+
+#For pre-ranked GSEA
+resOrderLFC <- res[order(res$log2FoldChange), ]
+resOrderLFC <- resOrderLFC[,2, drop = F]
+resOrderLFC$Gene <- rownames(resOrderLFC)
+resOrderLFC <- resOrderLFC[,c(2,1)]
+#write.table(resOrderLFC, "20201104_GSEA_Rankedlist_FEVPred_Bronch.rnk", sep = "\t", col.names = T, row.names = F)
+
+resSig <- resOrdered[resOrdered$padj < 0.05,]
+resSig <- resSig[!is.na(resSig$padj),]
+
+resSig <- resSig[order(resSig$log2FoldChange), ]
+numSig <- nrow(resSig)
+
+resSigUp <- resSig[head(order(resSig$log2FoldChange, decreasing = T), 50),]
+resSigDown <- resSig[head(order(resSig$log2FoldChange, decreasing = F), 50),]
+resSig2 <- rbind(resSigDown, resSigUp)
+# numUp <- nrow(resSig[resSig$log2FoldChange > 0.5, ])
+# numDown <- nrow(resSig[resSig$log2FoldChange < -0.5, ])
+
+resSig3 <- resSig[abs(resSig$log2FoldChange) > 0.01,]
+```
+
+A total of `r nrow(resSig)` genes were passed the adjusted p-value < 0.05 threshold.
+
+### Volcano plot
+
+```{r, message = F, warning = F}
+g <- ggplot(resOrdered, aes(x = log2FoldChange, y = nLogPVal)) +
+  geom_point(size = 0.75) +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 14)
+  ) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 15), legend.text = ggplot2::element_text(size = 13)) +
+  ggplot2::guides(
+    colour =
+      ggplot2::guide_legend(override.aes = list(size = 2))
+  )
+if(nrow(resSig2) > 0){
+g <- g +
+  geom_point(data = resSig2, aes(x = log2FoldChange, y = nLogPVal), color = "Red")+
+  ggplot2::labs(y = "-log10(Adjusted p-value)") +
+  ggplot2::ggtitle(label = "COPD status") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  )) + geom_line(y = 1.3)
+}
+
+g
+```
+The red dots show the top 50 most up/down regulated genes which pass the adjusted p-value threshold.
+
+### Heatmap {.tabset}
+
+#### All genes, FDR < 0.05
+
+```{r}
+counts.z <- t(scale(t(counts)))
+counts.z.trim <- counts.z
+
+counts.z.trim[counts.z.trim < -2] <- -2
+counts.z.trim[counts.z.trim > 2] <- 2
+
+counts.z.trim <- counts.z.trim[rownames(counts.z.trim) %in% rownames(resSig),]
+
+COPD_status <- annotBronch$COPD_status
+Smoker_status <- annotBronch$GRPB_SMK_STS
+
+annotation_col <- data.frame(COPD_status, Smoker_status)
+rownames(annotation_col) <- colnames(counts.z.trim)
+callback <- function(hc, mat) {
+  sv <- svd(t(mat))$v[, 1]
+  dend <- reorder(as.dendrogram(hc), wts = sv)
+  as.hclust(dend)
+}
+
+out <- pheatmap(counts.z.trim,
+  color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100),
+  annotation_col = annotation_col,
+  legend = T,
+  show_rownames = F,
+  show_colnames = F,
+  fontsize_row = 9,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE
+)
+
+out
+```
+
+#### FDR < 0.05, Log2 Fold change > 0.01 
+
+`r nrow(resSig3)` genes total:
+
+```{r}
+counts.z <- t(scale(t(counts)))
+counts.z.trim <- counts.z
+
+counts.z.trim[counts.z.trim < -2] <- -2
+counts.z.trim[counts.z.trim > 2] <- 2
+
+counts.z.trim <- counts.z.trim[rownames(counts.z.trim) %in% rownames(resSig3),]
+
+COPD_status <- annotBronch$COPD_status
+Smoker_status <- annotBronch$GRPB_SMK_STS
+
+annotation_col <- data.frame(COPD_status, Smoker_status)
+rownames(annotation_col) <- colnames(counts.z.trim)
+callback <- function(hc, mat) {
+  sv <- svd(t(mat))$v[, 1]
+  dend <- reorder(as.dendrogram(hc), wts = sv)
+  as.hclust(dend)
+}
+
+out <- pheatmap(counts.z.trim,
+  color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100),
+  annotation_col = annotation_col,
+  legend = T,
+  show_rownames = F,
+  show_colnames = F,
+  fontsize_row = 9,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE
+)
+
+out
+```
+
+#### Top 50 up/downreg genes, FDR < 0.05
+
+```{r}
+counts.z <- t(scale(t(counts)))
+counts.z.trim <- counts.z
+
+counts.z.trim[counts.z.trim < -2] <- -2
+counts.z.trim[counts.z.trim > 2] <- 2
+
+counts.z.trim <- counts.z.trim[rownames(counts.z.trim) %in% rownames(resSig2),]
+
+COPD_status <- annotBronch$COPD_status
+Smoker_status <- annotBronch$GRPB_SMK_STS
+
+annotation_col <- data.frame(COPD_status, Smoker_status)
+rownames(annotation_col) <- colnames(counts.z.trim)
+callback <- function(hc, mat) {
+  sv <- svd(t(mat))$v[, 1]
+  dend <- reorder(as.dendrogram(hc), wts = sv)
+  as.hclust(dend)
+}
+
+out <- pheatmap(counts.z.trim,
+  color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100),
+  annotation_col = annotation_col,
+  legend = T,
+  show_rownames = F,
+  show_colnames = F,
+  fontsize_row = 9,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE
+)
+
+out
+```
+
+
+### Tables
+
+#### Top 50 most upregulated in higher FEV1 predicted, passing adjusted p-val threshold
+
+```{r}
+resSigUp <- resSig[head(order(resSig$log2FoldChange, decreasing = T), 50),]
+resSigUp <- resSigUp[,c(2,5,6)]
+colnames(resSigUp) <- c("Log2FC", "P-value", "Adj. P-value")
+resSigUp %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(resSig) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+```
+
+\n
+
+#### Top 50 most downregulated in higher FEV1 predicted, passing adjusted p-val threshold
+
+```{r}
+resSigDown <- resSig[head(order(resSig$log2FoldChange, decreasing = F), 50),]
+resSigDown <- resSigDown[,c(2,5,6)]
+colnames(resSigDown) <- c("Log2FC", "P-value", "Adj. P-value")
+resSigDown %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(resSig) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+```
+
+<br>
+</br>
+
+## Using COPD as categorical variable {.tabset}
+
+Differential expression was conducted using the DESeq2 package to compare patients with low FEV1pred values (< 80) and high values, where all samples with low FEV1pred is considered to be COPD. Expected counts outputted from the RSEM algorithm was taken for DESeq2. 
+
+Model used: ~Smoking status + Age + TIN + COPD status
+
+```{r, message = F, warning = F}
+dds <- DESeqDataSetFromMatrix(
+  countData = counts,
+  colData = annotBronch,
+  design = ~GRPB_SMK_STS + AGE + TIN + COPD_status
+)
+
+dds$GRPB_SMK_STS <- relevel(dds$GRPB_SMK_STS, ref = "Former_Smoker")
+dds$COPD_status <- relevel(dds$COPD_status, ref = "NO_COPD")
+
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep, ]
+dds <- DESeq(dds)
+res <- results(dds)
+
+res$nLogPVal <- -log10(res$padj)
+
+resOrdered <- res[order(res$pvalue), ]
+resOrdered <- as.data.frame(resOrdered)
+
+#For pre-ranked GSEA
+resOrderLFC <- res[order(res$log2FoldChange, decreasing = FALSE), ]
+resOrderLFC <- resOrderLFC[,2, drop = F]
+resOrderLFC$SAMPLE <- rownames(resOrderLFC)
+resOrderLFC <- resOrderLFC[,c(2,1)]
+
+write.table(resOrderLFC, "20201104_GSEA_Rankedlist_COPDstatus_Bronch.rnk", sep = "\t", col.names = T, row.names = F)
+
+resSig <- resOrdered %>%
+  filter(padj < 0.05) %>%
+  filter(abs(log2FoldChange) > 0.5)
+numSig <- nrow(resSig)
+numUp <- nrow(resSig[resSig$log2FoldChange > 0.5, ])
+numDown <- nrow(resSig[resSig$log2FoldChange < -0.5, ])
+```
+
+A total of `r numSig`(`r numUp` Upregulated, `r numDown` Downregulated) genes were differentially expressed (padj < 0.05, abs(log2FC) > 0.5).
+
+### Corresponding microarray analysis
+
+```{r}
+# steilingMicroarray <- readRDS("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Data/STEILING_bronch.RDS")
+# 
+# arrayPheno <- Biobase::pData(steilingMicroarray)
+# arrayPheno$fev1_fvc_ratio <- arrayPheno$fev1_fvc_ratio/100
+# 
+# design <- model.matrix(~smoking_status+age+copd, data = arrayPheno)
+# # design <- model.matrix(~percent_fev1+fev1_fvc_ratio+smoking_status+age+copd, data = arrayPheno)
+# # design <- model.matrix(~percent_fev1+fev1_fvc_ratio+smoking_status+age+copd, data = arrayPheno)
+# 
+# fit <- lmFit(steilingMicroarray, design)  # fit each probeset to model
+# efit <- eBayes(fit)        # empirical Bayes adjustment
+# de.res <- topTable(efit, coef=2, number = 100000)
+# 
+# de.res$GeneName <- gsub("_at","",rownames(de.res))
+# de.res$nLogPVal <- -log(de.res$adj.P.Val)
+# eset.ranklist <- de.res[,c(9,3)]
+# eset.ranklist <- eset.ranklist[order(eset.ranklist$logFC, decreasing = FALSE),]
+# eset.ranklist <- read.table("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Analysis/1stPass/100525_lam_copdcovars_tval.rnk", header = F)
+# 
+# mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+# 
+# BM <- getBM(filters= "hgnc_symbol", attributes= c("ensembl_gene_id","hgnc_symbol"),values=eset.ranklist$V1,mart= mart)
+# 
+# BM <- BM[BM$ensembl_gene_id %in% rownames(assay(seBronch)),]
+# BM <- BM[!duplicated(BM$hgnc_symbol),]
+# mergeBM <- merge(eset.ranklist, BM, by.x = "V1", by.y = "hgnc_symbol")
+# mergeBM <- mergeBM[,c(3,2)]
+# mergeBM <- mergeBM[order(mergeBM$V2, decreasing = F),]
+# mergeBM <- mergeBM[!duplicated(mergeBM$ensembl_gene_id),]
+# 
+# resSig2 <- resSig[rownames(resSig) %in% mergeBM$ensembl_gene_id,]
+# resSig2Up <- resSig2[resSig2$log2FoldChange>0.5,]
+# resSig2Down <- resSig2[resSig2$log2FoldChange < -0.5,]
+# write.table(x = rownames(resSig2Up), file = "/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Analysis/1stPass/20201125_DECAMP_Bronch_geneList_Up.grp", col.names = F, row.names = F)
+# write.table(x = rownames(resSig2Down), file = "/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Analysis/1stPass/20201125_DECAMP_Bronch_geneList_Down.grp", col.names = F, row.names = F)
+# write.table(mergeBM, "20201125_GSEA_Rankedlist_COPDstatus_Bronch_FromSteilingMicroarray.rnk", sep = "\t", col.names = F, row.names = F)
+```
+
+
+### Volcano plot
+
+```{r, message = F, warning = F}
+ggplot(resOrdered, aes(x = log2FoldChange, y = nLogPVal)) +
+  geom_point(size = 0.75) +
+  ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 14)
+  ) +
+  ggplot2::theme(legend.title = ggplot2::element_text(size = 15), legend.text = ggplot2::element_text(size = 13)) +
+  ggplot2::guides(
+    colour =
+      ggplot2::guide_legend(override.aes = list(size = 2))
+  ) +
+  geom_point(data = resSig, aes(x = log2FoldChange, y = nLogPVal), color = "Red")+
+  ggplot2::labs(y = "-log10(Adjusted p-value)") +
+  ggplot2::ggtitle(label = "COPD status") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+```
+
+### Heatmap
+
+```{r}
+counts.z <- t(scale(t(counts)))
+counts.z.trim <- counts.z
+
+counts.z.trim[counts.z.trim < -2] <- -2
+counts.z.trim[counts.z.trim > 2] <- 2
+
+counts.z.trim <- counts.z.trim[rownames(counts.z.trim) %in% rownames(resSig),]
+
+COPD_status <- annotBronch$COPD_status
+Smoker_status <- annotBronch$GRPB_SMK_STS
+
+annotation_col <- data.frame(COPD_status, Smoker_status)
+rownames(annotation_col) <- colnames(counts.z.trim)
+callback <- function(hc, mat) {
+  sv <- svd(t(mat))$v[, 1]
+  dend <- reorder(as.dendrogram(hc), wts = sv)
+  as.hclust(dend)
+}
+
+out <- pheatmap(counts.z.trim,
+  color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100),
+  annotation_col = annotation_col,
+  legend = T,
+  show_rownames = F,
+  show_colnames = F,
+  fontsize_row = 9,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE
+)
+
+out
+```
+
+### Violin Plots
+
+```{r}
+dots <- T
+boxplot <- F
+violin <- T
+
+df <- data.frame(
+  x = annotBronch$`Sample Type`,
+  y = counts["CEACAM5",]
+)
+
+p <- ggplot2::ggplot(df) +
+  ggplot2::aes_string(
+    x = "x",
+    y = "y"
+  )
+if (dots == TRUE) {
+  p <- p + ggplot2::geom_jitter(
+    color = "blue",
+    width = 0.2,
+    height = 0,
+    size = 1,
+    alpha = 1
+  )
+}
+if (boxplot == TRUE) {
+  p <- p + ggplot2::geom_boxplot(
+    width = 0.5,
+    alpha = 0
+  )
+}
+if (violin == TRUE) {
+  p <- p + ggplot2::geom_violin(
+    trim = TRUE,
+    scale = "width",
+    size = 1,
+    fill = "grey",
+    alpha = 0.75
+  )
+}
+
+p <- p + ggplot2::theme_bw() +
+  ggplot2::theme(
+    panel.grid.major = ggplot2::element_blank(),
+    panel.grid.minor = ggplot2::element_blank(),
+    axis.text = ggplot2::element_text(size = 14),
+    axis.title = ggplot2::element_text(size = 10)
+  ) + ggplot2::theme(axis.text.x = ggplot2::element_text(size = 15)) +
+  ggplot2::ylab("Counts") +
+  ggplot2::theme(
+    axis.title.y = element_text(size = 15),
+    axis.title.x = ggplot2::element_blank()
+  )
+
+p <- p + ggplot2::ggtitle(label = "Gene: CEACAM5") +
+  ggplot2::theme(plot.title = ggplot2::element_text(
+    hjust = 0.5,
+    size = 18
+  ))
+
+p
+```
+
+### Tables
+
+#### Differentially expressed in COPD patients
+
+```{r}
+resSigDown <- resSig[resSig$log2FoldChange < -0.5, ]
+resSigDown <- resSigDown[order(resSigDown$log2FoldChange, decreasing = F),]
+resSigDown <- resSigDown[,c(2,5,6)]
+colnames(resSigDown) <- c("Log2FC", "P-value", "Adj. P-value")
+resSigDown %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(resSig) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+# write.table(resSigDown, "20201112_Up_in_COPD_Bronch.txt", sep = "\t", quote=F)
+```
+
+#### Differentially expressed in non-COPD patients
+
+```{r}
+resSigUp <- resSig[resSig$log2FoldChange > 0.5, ]
+resSigUp <- resSigUp[order(resSigUp$log2FoldChange, decreasing = T),]
+resSigUp <- resSigUp[,c(2,5,6)]
+colnames(resSigUp) <- c("Log2FC", "P-value", "Adj. P-value")
+resSigUp %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(resSig) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+# write.table(resSigUp, "20201112_Down_in_COPD_Bronch.txt", sep = "\t", quote=F)
+```
+
+### Checking for overlap between COPD signature
+
+Differentially expressed genes were checked for overlap with the 98 genes from the COPD signature from [Steiling et al, 2013](https://pubmed.ncbi.nlm.nih.gov/23471465/)
+
+```{r}
+#Preprocessing. Run ahead of time and comment out when knitting Rmd
+names(steilingGenes) <- "Names"
+steilingSignature <- steilingGenes$Names
+steilingUp <- head(steilingSignature,54)
+
+#create mart object, this is for homo sapiens
+
+mart <- useMart(biomart = "ensembl", dataset = "hsapiens_gene_ensembl")
+
+upBM <- getBM(filters= "hgnc_symbol", attributes= c("ensembl_gene_id","hgnc_symbol"),values=steilingUp,mart= mart)
+
+upBM <- upBM[upBM$ensembl_gene_id %in% rownames(assay(seBronch)),]
+# write.table(upBM$ensembl_gene_id, "20201102_SteilingUp_Genelist.grp", sep = "\t", quote = F, col.names = F, row.names = F)
+steilingDown <- tail(steilingSignature,44)
+
+downBM <- getBM(filters= "hgnc_symbol", attributes= c("ensembl_gene_id","hgnc_symbol"),values=steilingDown,mart= mart)
+downBM <- downBM[-32,]
+# write.table(downBM$ensembl_gene_id, "20201102_SteilingDown_Genelist.grp", sep = "\t", quote = F, col.names = F, row.names = F)
+
+#Send to GSEA 11/3/2020
+
+
+#Check for overlap:
+upoverlap <- sum(downBM$hgnc_symbol %in% rownames(resSigUp))
+upoverlapgenes <- downBM$hgnc_symbol[downBM$hgnc_symbol %in% rownames(resSigUp)]
+downoverlap <- sum(upBM$hgnc_symbol %in% rownames(resSigDown))
+downoverlapgenes <- upBM$hgnc_symbol[upBM$hgnc_symbol %in% rownames(resSigDown)]
+```
+
+Overall, of the 54 genes associated with increase of COPD status, `r downoverlap` were differentially expressed in patients considered to be of COPD status. These are: `r downoverlapgenes`. 
+Of the 44 genes associated with decrease of COPD status, `r upoverlap` were differentially expressed in patients considered to be of COPD status. These are: `r upoverlapgenes`.
+
+
+### Overlap with microarray
+
+```{r}
+resSigUp <- read.table("20201112_Down_in_COPD_Bronch.txt", sep = "\t")
+rownames(resSigUp)
+
+
+```
+
+
+### GSEA, comparison with COPD signature {.tabset}
+
+Gene set enrichment analysis was conducted using genes associated with COPD status from [Steiling et al, 2013](https://pubmed.ncbi.nlm.nih.gov/23471465/). The preranked version of GSEA was performed on normalized counts generated from DESeq2. The rank was generated in ascending order of log2 fold change values outputted from DESeq2.
+
+Model used: ~Smoking status + Age + TIN + COPD status
+
+#### Upregulated Genes in COPD
+
+54 Genes associated with increase in COPD status were used for GSEA.
+
+```{r}
+GSEA <- c(0.685,2.17,0.0,0.0, 0.0)
+GSEA <- as.data.frame(as.matrix(GSEA))
+rownames(GSEA) <- c("Enrichment Score",
+                    "Normalized Enrichment Score",
+                    "Nominal p-value",
+                    "FDR q-value",
+                    "FWER q-value")
+colnames(GSEA) <- c("Upregulated in current smokers")
+
+GSEA %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(GSEA) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "200px")
+
+gsea_details1 <- read.csv("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Analysis/1stPass/GSEA_Increase_in_COPD_PreRank_Bronch.csv", row.names = 1)
+colnames(gsea_details1) <- gsub("\\.", "_", colnames(gsea_details1)) 
+
+gsea_details1 <- merge(upBM, gsea_details1, by.x = "ensembl_gene_id", by.y = "ENSEMBL_GENEID")
+gsea_details1 <- gsea_details1[order(gsea_details1$RANK_IN_GENE_LIST),]
+
+gsea_details1 %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(gsea_details1) + 1),
+    row.names = FALSE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+```
+
+<br> 
+
+![](/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Analysis/1stPass/enplot_20201104_GSEA_Increase_in_COPD_PreRank_Bronch.png)
+
+\n
+
+#### Downregulated Genes in COPD
+
+44 Genes associated with decrease in COPD status were used for GSEA.
+
+```{r}
+GSEA <- c(0.612,2.11,0.0,0.0, 0.0)
+GSEA <- as.data.frame(as.matrix(GSEA))
+rownames(GSEA) <- c("Enrichment Score",
+                    "Normalized Enrichment Score",
+                    "Nominal p-value",
+                    "FDR q-value",
+                    "FWER q-value")
+colnames(GSEA) <- c("Downregulated in current smokers")
+
+GSEA %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(GSEA) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "200px")
+
+gsea_details2 <- read.csv("/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Analysis/1stPass/GSEA_Decrease_in_COPD_PreRank_Bronch.csv", row.names = 1)
+colnames(gsea_details2) <- gsub("\\.", "_", colnames(gsea_details2)) 
+
+gsea_details2 <- merge(downBM, gsea_details2, by.x = "ensembl_gene_id", by.y = "ENSEMBL_GENEID")
+gsea_details2 <- gsea_details2[order(gsea_details2$RANK_IN_GENE_LIST),]
+
+gsea_details2 %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(gsea_details2) + 1),
+    row.names = FALSE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+```
+
+<br> 
+
+![](/restricted/projectnb/camplab/home/ykoga07/DECAMP/Novartis/Analysis/1stPass/enplot_20201104_GSEA_Decrease_in_COPD_PreRank_Bronch.png)
+
+
+### EnrichR, upregulated genes {.tabset}
+
+```{r, message = F, warning = F, echo = F}
+dbs <- listEnrichrDbs()
+websiteLive <- TRUE
+
+if (is.null(dbs)){
+  websiteLive <- FALSE
+}
+
+dbs <- c("GO_Molecular_Function_2015", "GO_Cellular_Component_2015", "GO_Biological_Process_2015")
+if (websiteLive){
+  enriched <- suppressMessages(enrichr(rownames(resSigUp), dbs))
+}
+
+go_biological <- enriched[["GO_Biological_Process_2015"]]
+go_molecular <- enriched[["GO_Molecular_Function_2015"]]
+go_cellular <- enriched[["GO_Cellular_Component_2015"]]
+```
+
+#### GO_Biological_Process_2015
+
+```{r}
+go_biological %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(go_biological) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+```
+
+#### GO_Cellular_Component_2015
+
+```{r}
+go_cellular %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(go_cellular) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+```
+
+#### GO_Molecular_Function_2015
+
+```{r}
+go_molecular %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(go_molecular) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+
+```
+
+### EnrichR, downregulated genes {.tabset}
+
+```{r, message = F, warning = F, echo = F}
+dbs <- listEnrichrDbs()
+websiteLive <- TRUE
+
+if (is.null(dbs)){
+  websiteLive <- FALSE
+}
+
+dbs <- c("GO_Molecular_Function_2015", "GO_Cellular_Component_2015", "GO_Biological_Process_2015")
+if (websiteLive){
+  enriched <- suppressMessages(enrichr(rownames(resSigDown), dbs))
+}
+
+go_biological <- enriched[["GO_Biological_Process_2015"]]
+go_molecular <- enriched[["GO_Molecular_Function_2015"]]
+go_cellular <- enriched[["GO_Cellular_Component_2015"]]
+```
+
+#### GO_Biological_Process_2015
+
+```{r}
+go_biological %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(go_biological) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+```
+
+#### GO_Cellular_Component_2015
+
+```{r}
+go_cellular %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(go_cellular) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+```
+
+#### GO_Molecular_Function_2015
+
+```{r}
+go_molecular %>%
+  knitr::kable(
+    format = "html", align = rep("c", ncol(go_molecular) + 1),
+    row.names = TRUE
+  ) %>%
+  kableExtra::kable_styling() %>%
+  kableExtra::scroll_box(height = "300px")
+
+```
+
+
+# Reproducibility
+
+<details><summary>For reproducibility:</summary>
+
+```{r, warning = F, message = F}
+## datetime
+
+Sys.time()
+```
+
+```{r, warning = F, message = F}
+## session info
+
+sessionInfo()
+```
+</details>
